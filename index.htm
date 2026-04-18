@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aero Market | Models</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --primary: #00b2ff; --bg: #0a0b0d; --card-bg: rgba(255, 255, 255, 0.05); --edit: #ffa500; --announcement: #ffcc00; }
+        body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at top, #1a1c20 0%, var(--bg) 100%); color: white; margin: 0; min-height: 100vh; }
+        
+        #announcement-bar { background: var(--announcement); color: black; text-align: center; padding: 12px; font-weight: 800; display: none; position: sticky; top: 0; z-index: 101; text-transform: uppercase; }
+
+        .nav-tabs { display: flex; justify-content: center; background: rgba(0, 0, 0, 0.9); padding: 15px; gap: 20px; border-bottom: 1px solid #333; position: sticky; top: 45px; z-index: 99; backdrop-filter: blur(10px); }
+        .tab-btn { background: none; border: 1px solid transparent; color: #888; font-size: 1rem; font-weight: bold; cursor: pointer; padding: 10px 20px; border-radius: 8px; transition: 0.3s; }
+        .tab-btn.active { color: white; background: var(--card-bg); border-color: var(--primary); }
+        
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        
+        .content-section { display: none; padding: 40px 20px; }
+        .content-section.active { display: block; }
+        
+        .admin-card { background: #16181d; max-width: 500px; margin: 0 auto 20px auto; padding: 30px; border-radius: 20px; border: 1px solid #444; }
+        input, textarea, select { width: 100%; padding: 12px; margin-bottom: 15px; background: #000; border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; font-size: 1rem; font-family: inherit; }
+        
+        .section-title { text-align: left; max-width: 1200px; margin: 40px auto 20px; border-left: 5px solid var(--primary); padding-left: 15px; letter-spacing: 1px; }
+
+        .shop-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; max-width: 1200px; margin: 0 auto 50px; }
+        .item-card { background: var(--card-bg); border-radius: 20px; padding: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.1); transition: 0.3s; }
+        .item-img { width: 100%; height: 200px; object-fit: cover; border-radius: 12px; margin-bottom: 10px; background: #222; }
+        
+        .btn-main { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .buy-btn { display: block; background: var(--primary); color: white; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 5px; }
+        .edit-btn { background: var(--edit); border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; flex: 1; font-weight: bold; }
+        .del-btn { background: #ff4b4b; border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; flex: 1; font-weight: bold; }
+        .admin-controls { display: flex; gap: 10px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="announcement-bar"></div>
+
+    <div id="login-overlay">
+        <div class="admin-card" style="width:300px">
+            <h3>Admin Access</h3>
+            <input type="password" id="passInput" placeholder="Enter Password">
+            <button class="btn-main" onclick="verifyPass()">Login</button>
+            <button class="tab-btn" onclick="closeLogin()" style="margin-top:10px; width:100%">Cancel</button>
+        </div>
+    </div>
+
+    <nav class="nav-tabs">
+        <button class="tab-btn active" id="btn-shop" onclick="showTab('shop')">🛒 Storefront</button>
+        <button class="tab-btn" id="btn-admin" onclick="openAdmin()">🛠 Admin Panel</button>
+    </nav>
+
+    <section id="view-shop" class="content-section active">
+        <h1 style="text-align:center;">AERO MARKET</h1>
+        
+        <h2 class="section-title">🏎️ CAR MODELS</h2>
+        <div class="shop-container" id="cars-container">Loading cars...</div>
+
+        <h2 class="section-title">🏁 TRACK MODELS</h2>
+        <div class="shop-container" id="tracks-container">Loading tracks...</div>
+    </section>
+
+    <section id="view-admin" class="content-section">
+        <div class="admin-card" style="border-color: var(--announcement);">
+            <h2>📢 Shop Announcement</h2>
+            <textarea id="announcement-text" placeholder="Type message..." rows="2"></textarea>
+            <button class="btn-main" style="background:var(--announcement); color:black;" onclick="updateAnnouncement()">PUBLISH</button>
+        </div>
+
+        <div class="admin-card">
+            <h2 id="admin-title">List New Item</h2>
+            <select id="category">
+                <option value="car">Car Model</option>
+                <option value="track">Track Model</option>
+            </select>
+            <input type="text" id="name" placeholder="Model Name">
+            <input type="number" id="price" placeholder="Price (Robux)">
+            <input type="text" id="img" placeholder="Image URL">
+            <input type="text" id="url" placeholder="Roblox Link">
+            <button class="btn-main" id="save-btn" onclick="handleSave()">POST TO DATABASE</button>
+            <button id="cancel-edit" class="tab-btn" style="display:none; width:100%; margin-top:10px;" onclick="resetForm()">Cancel Edit</button>
+        </div>
+    </section>
+
+    <script>
+        const SB_URL = 'https://hiyildkljjubspiykttg.supabase.co'; 
+        const SB_KEY = 'sb_publishable_Ekdlw6wahM8lj1clTpNQ5Q_CQggd9cc';
+        const _supabase = supabase.createClient(SB_URL, SB_KEY);
+
+        let isAdmin = false;
+        let editID = null;
+
+        loadData();
+        loadAnnouncement();
+
+        async function loadData() {
+            const { data, error } = await _supabase.from('items').select('*').order('created_at', { ascending: false });
+            if (!error) render(data);
+        }
+
+        async function loadAnnouncement() {
+            const { data } = await _supabase.from('announcements').select('content').eq('id', 1).single();
+            const bar = document.getElementById('announcement-bar');
+            if (data && data.content) { bar.innerText = "📣 " + data.content; bar.style.display = "block"; }
+            else { bar.style.display = "none"; }
+        }
+
+        async function updateAnnouncement() {
+            const msg = document.getElementById('announcement-text').value;
+            await _supabase.from('announcements').upsert({ id: 1, content: msg });
+            alert("Announcement Updated!"); loadAnnouncement();
+        }
+
+        async function handleSave() {
+            const itemData = {
+                name: document.getElementById('name').value,
+                price: parseInt(document.getElementById('price').value),
+                image_url: document.getElementById('img').value,
+                roblox_url: document.getElementById('url').value,
+                category: document.getElementById('category').value // New category field
+            };
+
+            if (editID) {
+                await _supabase.from('items').update(itemData).eq('id', editID);
+            } else {
+                await _supabase.from('items').insert([itemData]);
+            }
+            resetForm(); loadData(); showTab('shop');
+        }
+
+        function startEdit(id, name, price, img, url, cat) {
+            editID = id;
+            document.getElementById('name').value = name;
+            document.getElementById('price').value = price;
+            document.getElementById('img').value = img;
+            document.getElementById('url').value = url;
+            document.getElementById('category').value = cat || 'car';
+            document.getElementById('admin-title').innerText = "Editing Item";
+            document.getElementById('save-btn').innerText = "SAVE CHANGES";
+            document.getElementById('cancel-edit').style.display = "block";
+            showTab('admin');
+        }
+
+        function resetForm() {
+            editID = null;
+            document.getElementById('name').value = '';
+            document.getElementById('price').value = '';
+            document.getElementById('img').value = '';
+            document.getElementById('url').value = '';
+            document.getElementById('admin-title').innerText = "List New Item";
+            document.getElementById('save-btn').innerText = "POST TO DATABASE";
+            document.getElementById('cancel-edit').style.display = "none";
+        }
+
+        async function remove(id) {
+            if(confirm("Delete?")) { await _supabase.from('items').delete().eq('id', id); loadData(); }
+        }
+
+        function render(list) {
+            const carDiv = document.getElementById('cars-container');
+            const trackDiv = document.getElementById('tracks-container');
+            carDiv.innerHTML = ''; trackDiv.innerHTML = '';
+
+            const cars = list.filter(i => i.category === 'car' || !i.category);
+            const tracks = list.filter(i => i.category === 'track');
+
+            if(cars.length === 0) carDiv.innerHTML = "<p>No cars available.</p>";
+            if(tracks.length === 0) trackDiv.innerHTML = "<p>No tracks available.</p>";
+
+            const createCard = (item) => `
+                <div class="item-card">
+                    <img src="${item.image_url}" class="item-img" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                    <h3>${item.name}</h3>
+                    <p style="color:#00e5ff; font-weight:bold;">R$ ${item.price}</p>
+                    <a href="${item.roblox_url}" target="_blank" class="buy-btn">PURCHASE</a>
+                    ${isAdmin ? `<div class="admin-controls">
+                        <button class="edit-btn" onclick="startEdit(${item.id}, '${item.name}', ${item.price}, '${item.image_url}', '${item.roblox_url}', '${item.category}')">Edit</button>
+                        <button class="del-btn" onclick="remove(${item.id})">Delete</button>
+                    </div>` : ''}
+                </div>`;
+
+            cars.forEach(item => carDiv.innerHTML += createCard(item));
+            tracks.forEach(item => trackDiv.innerHTML += createCard(item));
+        }
+
+        function openAdmin() { if(isAdmin) showTab('admin'); else document.getElementById('login-overlay').style.display = 'flex'; }
+        function verifyPass() {
+            if(document.getElementById('passInput').value === "Walter") {
+                isAdmin = true; document.getElementById('login-overlay').style.display = 'none';
+                showTab('admin'); loadData();
+            } else alert("Wrong!");
+        }
+        function closeLogin() { document.getElementById('login-overlay').style.display = 'none'; }
+        function showTab(t) {
+            document.getElementById('view-shop').classList.toggle('active', t === 'shop');
+            document.getElementById('view-admin').classList.toggle('active', t === 'admin');
+            document.getElementById('btn-shop').classList.toggle('active', t === 'shop');
+            document.getElementById('btn-admin').classList.toggle('active', t === 'admin');
+        }
+    </script>
+</body>
+</html>
